@@ -96,6 +96,47 @@ export interface Detail {
   reason?: 'asset' | 'link' | 'folder' | 'large' | 'binary';
 }
 
+export interface ListedFile {
+  path: string;
+  size: number;
+  mtime: number;
+  link: boolean;
+  type: string;
+  category: Category;
+  language: string;
+  complex: boolean;
+}
+
+export interface ListedFolder {
+  path: string;
+  name: string;
+  kind: 'git' | 'plain' | 'missing' | 'error';
+  files: ListedFile[];
+  truncated: boolean;
+  error?: string;
+}
+
+export interface FileListing {
+  folders: ListedFolder[];
+  listedAt: string;
+}
+
+export interface FileContent {
+  kind: 'text' | 'media' | 'asset';
+  path: string;
+  type: string;
+  category: Category;
+  language: string;
+  size: number;
+  mtime: number;
+  text?: string;
+  lines?: number;
+  mime?: string;
+  data?: Uint8Array;
+  target?: string;
+  reason?: 'missing' | 'link' | 'folder' | 'large' | 'format' | 'binary';
+}
+
 export interface Commit {
   hash: string;
   parents: string[];

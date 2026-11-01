@@ -163,6 +163,17 @@ function registerIpc() {
     return backend.fileDetail(root, file, { ...scanOptions(), compare: options.compare, oldRepoPath: options.oldRepoPath });
   });
 
+  handle('files:list', async (id) => {
+    const roots = [...new Set((await projectRoots(id)).map((r) => path.resolve(r)))];
+    const folders = await backend.mapLimit(roots, 4, (root) => backend.listFiles(root, scanOptions()));
+    return { folders, listedAt: new Date().toISOString() };
+  });
+
+  handle('files:read', async (id, root, file) => {
+    assertRoot(id, root);
+    return backend.fileContent(root, file, scanOptions());
+  });
+
   handle('baseline:reset', async (id, root) => {
     assertRoot(id, root);
     return backend.resetBaseline(root);

@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('gitview', {
   detail: invoke('detail'),
   resetBaseline: invoke('baseline:reset'),
 
+  listFiles: invoke('files:list'),
+  readFile: invoke('files:read'),
+
   commits: invoke('history:list'),
   commit: invoke('history:commit'),
   commitFile: invoke('history:file'),

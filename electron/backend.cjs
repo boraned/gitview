@@ -719,8 +719,108 @@ async function fileDetail(root, rel, options = {}) {
   throw new Error(info.error || 'Folder not found');
 }
 
+// ---------------------------------------------------------------- browsing (every file, not just changes)
+
+const LIST_LIMIT = 25000;
+const MEDIA_LIMIT = 64 * 1024 * 1024; // bytes sent to the renderer for an image/audio/video preview
+
+/** Every file in a folder: Git repos list tracked + untracked (not ignored); plain folders use the inventory walk. */
+async function listFiles(root, options = {}) {
+  root = path.resolve(String(root));
+  const base = { path: root, name: path.basename(root) };
+  try {
+    const info = await inspectRoot(root);
+    if (info.kind === 'missing') return { ...base, kind: 'missing', files: [], truncated: false, error: info.error };
+    const entries = [];
+    let truncated = false;
+    if (info.kind === 'git') {
+      const out = await git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--deduplicate']);
+      const rels = [...new Set(out.split('\0').filter(Boolean))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      if (rels.length > LIST_LIMIT) truncated = true;
+      const stats = await mapLimit(rels.slice(0, LIST_LIMIT), 32, async (rel) => {
+        try {
+          const st = await fs.lstat(path.join(root, rel));
+          return st.isFile() || st.isSymbolicLink() ? { rel, size: st.size, mtime: st.mtimeMs, link: st.isSymbolicLink() } : null;
+        } catch {
+          return null; // deleted in the working tree: the Changes tab shows those
+        }
+      });
+      for (const s of stats) if (s) entries.push(s);
+    } else {
+      const inv = await inventory(root);
+      truncated = inv.truncated;
+      for (const [rel, item] of inv.entries) entries.push({ rel, size: item.size, mtime: item.mtime, link: item.link });
+    }
+    const files = entries.map(({ rel, size, mtime, link }) => ({ path: rel, size, mtime, link, ...describe(rel, options) }));
+    return { ...base, kind: info.kind, files, truncated };
+  } catch (error) {
+    inspectCache.delete(root);
+    return { ...base, kind: 'error', files: [], truncated: false, error: error.message };
+  }
+}
+
+function sniffMedia(buf, category, rel) {
+  const hex = buf.subarray(0, 16).toString('hex');
+  const ascii = buf.subarray(0, 16).toString('latin1');
+  if (hex.startsWith('89504e47')) return 'image/png';
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+  if (ascii.startsWith('GIF8')) return 'image/gif';
+  if (ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WEBP') return 'image/webp';
+  if (ascii.startsWith('BM')) return category === 'image' ? 'image/bmp' : null;
+  if (hex.startsWith('00000100')) return 'image/x-icon';
+  if (ascii.slice(4, 12) === 'ftypavif' || ascii.slice(4, 12) === 'ftypavis') return 'image/avif';
+  if (category === 'image' && /\.svg$/i.test(rel)) {
+    const head = buf.subarray(0, 4096).toString('utf8');
+    return /<svg[\s>]/i.test(head) ? 'image/svg+xml' : null;
+  }
+  if (ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WAVE') return 'audio/wav';
+  if (ascii.startsWith('OggS')) return category === 'video' ? 'video/ogg' : 'audio/ogg';
+  if (ascii.startsWith('fLaC')) return 'audio/flac';
+  if (ascii.startsWith('ID3') || hex.startsWith('fffb') || hex.startsWith('fff3') || hex.startsWith('fff2')) return 'audio/mpeg';
+  if (hex.startsWith('1a45dfa3')) return category === 'audio' ? 'audio/webm' : 'video/webm';
+  if (ascii.slice(4, 8) === 'ftyp') return category === 'audio' ? 'audio/mp4' : 'video/mp4';
+  return null;
+}
+
+/**
+ * Current content of one file for the Files tab.
+ * kind: 'text' (text), 'media' (bytes + mime for an image/audio/video preview) or 'asset' (type only, with a reason).
+ */
+async function fileContent(root, rel, options = {}) {
+  root = path.resolve(String(root));
+  const abs = resolveInside(root, rel);
+  await assertNoEscape(root, abs);
+  const d = describe(rel, options);
+  const base = { path: rel, type: d.type, category: d.category, language: d.language, size: 0, mtime: 0 };
+  let st;
+  try {
+    st = await fs.lstat(abs);
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return { ...base, kind: 'asset', reason: 'missing' };
+    throw error;
+  }
+  Object.assign(base, { size: st.size, mtime: st.mtimeMs });
+  if (st.isSymbolicLink()) return { ...base, kind: 'asset', type: 'Symbolic link', category: 'binary', reason: 'link', target: await fs.readlink(abs) };
+  if (!st.isFile()) return { ...base, kind: 'asset', type: 'Folder', category: 'binary', reason: 'folder' };
+  const media = ['image', 'audio', 'video'].includes(d.category);
+  if (media) {
+    if (st.size > MEDIA_LIMIT) return { ...base, kind: 'asset', reason: 'large' };
+    const buf = await fs.readFile(abs);
+    const mime = sniffMedia(buf, d.category, rel);
+    if (mime) return { ...base, kind: 'media', mime, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) };
+    return { ...base, kind: 'asset', reason: 'format' };
+  }
+  if (st.size > TEXT_LIMIT) return { ...base, kind: 'asset', reason: 'large' };
+  const buf = await fs.readFile(abs);
+  if (isBinary(buf)) return { ...base, kind: 'asset', type: d.known ? d.type : 'Binary file', category: d.known ? d.category : 'binary', reason: 'binary' };
+  // Text content is shown even for types the Changes tab treats as assets (e.g. Godot scenes, glTF).
+  return { ...base, kind: 'text', language: d.language, text: buf.toString('utf8'), lines: countLines(buf) };
+}
+
 module.exports = {
   TEXT_LIMIT,
+  listFiles,
+  fileContent,
   git,
   mapLimit,
   inspectRoot,

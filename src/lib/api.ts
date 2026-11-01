@@ -1,4 +1,4 @@
-import type { ChangedFile, Commit, CommitDetail, Detail, Prefs, Project, ScanResult, Summary, ThemeInfo } from '../types';
+import type { ChangedFile, Commit, CommitDetail, Detail, FileContent, FileListing, Prefs, Project, ScanResult, Summary, ThemeInfo } from '../types';
 
 interface Bridge {
   listProjects(): Promise<Project[]>;
@@ -11,6 +11,9 @@ interface Bridge {
   scan(id: string): Promise<ScanResult>;
   detail(id: string, root: string, file: string, options?: { compare?: string; oldRepoPath?: string | null }): Promise<Detail>;
   resetBaseline(id: string, root: string): Promise<{ baselineAt: string }>;
+
+  listFiles(id: string): Promise<FileListing>;
+  readFile(id: string, root: string, file: string): Promise<FileContent>;
 
   commits(id: string, options?: { skip?: number; limit?: number; root?: string | null }): Promise<{ commits: Commit[]; hasMore: boolean }>;
   commit(id: string, root: string, hash: string): Promise<CommitDetail>;

@@ -87,3 +87,34 @@ test('scanning never writes inside the observed folders', async () => {
   await backend.fileDetail(fx.main, 'notes.md');
   assert.equal(snapshot(fx.main), before);
 });
+
+test('listFiles lists every file, not only changes; fileContent previews text and images', async () => {
+  const main = await backend.listFiles(fx.main);
+  assert.equal(main.kind, 'git');
+  assert.deepEqual(main.files.map((f) => f.path).sort(), ['fresh.txt', 'icon.png', 'notes.md', 'player.gd']);
+  // a fresh plain folder has no changes against its baseline, yet its files are listed
+  const gallery = path.join(fx.base, 'gallery');
+  fs.mkdirSync(path.join(gallery, 'images'), { recursive: true });
+  fs.writeFileSync(path.join(gallery, 'images', 'a.png'), fs.readFileSync(path.join(fx.main, 'icon.png')));
+  fs.writeFileSync(path.join(gallery, 'readme.txt'), 'hi\n');
+  const { repos } = await backend.scan([gallery]);
+  assert.equal(repos[0].files.length, 0);
+  const plain = await backend.listFiles(gallery);
+  assert.equal(plain.kind, 'plain');
+  assert.deepEqual(plain.files.map((f) => f.path), ['images/a.png', 'readme.txt']);
+  assert.equal(plain.files[0].category, 'image');
+
+  const text = await backend.fileContent(fx.main, 'player.gd');
+  assert.equal(text.kind, 'text');
+  assert.match(text.text, /func jump/);
+  assert.equal(text.language, 'gdscript');
+  const image = await backend.fileContent(fx.main, 'icon.png');
+  assert.equal(image.kind, 'media');
+  assert.equal(image.mime, 'image/png');
+  assert.ok(image.data.length > 60);
+  // the sniffed type wins over a misleading extension
+  fs.writeFileSync(path.join(fx.plain, 'shot.webp'), Buffer.from('ffd8ffe000104a464946', 'hex'));
+  assert.equal((await backend.fileContent(fx.plain, 'shot.webp')).mime, 'image/jpeg');
+  fs.rmSync(path.join(fx.plain, 'shot.webp'));
+  await assert.rejects(backend.fileContent(fx.main, '../game-combat/player.gd'), /Invalid file path/);
+});
