@@ -1,0 +1,67 @@
+{
+  "name": "gitview",
+  "productName": "gitview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A calm, read-only desktop viewer for every working change across a project's folders — the way git shows them.",
+  "author": "boraned <49809633+boraned@users.noreply.github.com>",
+  "homepage": "https://github.com/boraned/gitview",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/boraned/gitview.git"
+  },
+  "license": "MIT",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "build": "tsc -p . && vite build",
+    "start": "npm run build && electron .",
+    "test": "node --test test/unit/",
+    "test:e2e": "xvfb-run -a -s \"-screen 0 1480x940x24\" node --test --test-concurrency=1 test/e2e/",
+    "check": "npm test && npm run build && npm run test:e2e",
+    "dist": "npm run build && electron-builder --linux --publish never"
+  },
+  "build": {
+    "appId": "io.github.boraned.gitview",
+    "productName": "gitview",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**",
+      "dist/**",
+      "assets/icon.png",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Development",
+      "executableName": "gitview",
+      "synopsis": "Read-only git changes viewer"
+    }
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@shikijs/core": "^4.5.0",
+    "@shikijs/engine-javascript": "^4.5.0",
+    "@shikijs/langs": "^4.5.0",
+    "@shikijs/themes": "^4.5.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^42.11.18",
+    "electron-builder": "^26.18.0",
+    "lucide-react": "^1.66.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0"
+  },
+  "dependencies": {
+    "diff": "^9.0.0"
+  }
+}
