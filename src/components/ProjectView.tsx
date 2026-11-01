@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowUp, ChevronDown, ChevronRight, CircleAlert, Folder, FolderPlus, GitBranch, History, House,
-  Layers, ListFilter, PanelLeft, PanelLeftClose, RefreshCw, RotateCcw, Search, Settings2, X,
+  FolderTree, Layers, ListFilter, PanelLeft, PanelLeftClose, RefreshCw, RotateCcw, Search, Settings2, X,
 } from 'lucide-react';
 import { COMPACT, NARROW, useResizer, useStored, useWindowWidth } from '../lib/layout';
-import type { ChangedFile, Prefs, Project, Repo, ScanResult } from '../types';
+import type { ChangedFile, FileListing, Prefs, Project, Repo, ScanResult, Status } from '../types';
 import { api, errorText, fileKey } from '../lib/api';
 import { num, shortDir, splitPath, timeAgo } from '../lib/format';
 import { FileIcon, LineStats, Spinner, StatusBadge } from './bits';
 import { DiffPanel, type PanelTarget } from './DiffPanel';
 import { HistoryView } from './HistoryView';
+import { FilesView } from './FilesView';
 
 type Filter = 'all' | 'code' | 'assets';
 
@@ -115,7 +116,10 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
   onProjectChange: (p: Project) => void;
   themeVersion: number;
 }) {
-  const [tab, setTab] = useState<'changes' | 'history'>('changes');
+  const [tab, setTab] = useState<'changes' | 'history' | 'files'>('changes');
+  const [listing, setListing] = useState<FileListing | null>(null);
+  const [listingError, setListingError] = useState<string | null>(null);
+  const filesSearchRef = useRef<HTMLInputElement>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -181,7 +185,7 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
 
   useEffect(() => {
     const t = setInterval(() => {
-      if (!document.hidden && tab === 'changes') refresh();
+      if (!document.hidden && tab !== 'history') refresh();
     }, prefs.interval * 1000);
     return () => clearInterval(t);
   }, [refresh, prefs.interval, tab]);
@@ -191,6 +195,35 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [refresh]);
+
+  // ------------------------------------------------------------- every file (Files tab)
+
+  const listingBusy = useRef(false);
+  const loadListing = useCallback(async () => {
+    if (listingBusy.current) return;
+    listingBusy.current = true;
+    try {
+      setListing(await api.listFiles(project.id));
+      setListingError(null);
+    } catch (e) {
+      setListingError(errorText(e));
+    } finally {
+      listingBusy.current = false;
+    }
+  }, [project.id]);
+
+  useEffect(() => setListing(null), [project.id]);
+  // re-list whenever a scan lands (interval, focus, R) while the tab is open, and when a folder is added
+  useEffect(() => {
+    if (tab === 'files') loadListing();
+  }, [tab, scan?.scannedAt, project.roots.length, loadListing]);
+
+  const statuses = useMemo(() => {
+    const map = new Map<string, Status>();
+    for (const repo of scan?.repos || []) for (const file of repo.files) if (file.exists) map.set(fileKey(repo.path, file), file.status);
+    return map;
+  }, [scan]);
+  const listedCount = listing ? listing.folders.reduce((n, f) => n + f.files.length, 0) : null;
 
   // ------------------------------------------------------------- rows
 
@@ -266,6 +299,7 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
       if (document.querySelector('.modal')) return;
       const typing = (e.target as HTMLElement)?.matches?.('input, textarea, select');
       if (typing) {
+        if (tab === 'files') return; // the Files search box handles its own keys
         if (e.key === 'Escape') (e.target as HTMLElement).blur();
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
           e.preventDefault();
@@ -278,10 +312,12 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
       if (e.key === '[') return toggleSidebar();
       if (e.key === 'Escape') {
         if (sidebarOverlay) setSidebarOpen(false);
-        else if (narrow && showFile) setShowFile(false);
+        else if (tab === 'changes' && narrow && showFile) setShowFile(false);
+        else if (tab === 'files' && narrow) return; // Files handles its own back step
         else if (focus) setFocus(false);
         return;
       }
+      if (tab === 'files' && (e.key === '/' || ((e.key === 'f' || e.key === 'F') && narrow))) return;
       if (e.key === 'f' || e.key === 'F') {
         if (!narrow) setFocus((f) => !f);
         else if (tab === 'changes') setShowFile((s) => !s);
@@ -299,6 +335,7 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
       } else if (e.key === 'r' || e.key === 'F5') refresh();
       else if (e.key === '1') setTab('changes');
       else if (e.key === '2') setTab('history');
+      else if (e.key === '3') setTab('files');
       else if (tab === 'changes' && (e.key === 'ArrowDown' || e.key === 'j')) {
         e.preventDefault();
         move(1);
@@ -363,11 +400,14 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
           <span className="crumb">{project.name}</span>
         </div>
         <div className="tabs">
-          <button className={tab === 'changes' ? 'on' : ''} onClick={() => setTab('changes')}>
-            <Layers size={14} /> Changes <span className="tab-count">{scan ? num(scan.summary.count) : '…'}</span>
+          <button className={tab === 'changes' ? 'on' : ''} onClick={() => setTab('changes')} title="Working changes (1)">
+            <Layers size={14} /> <span className="tab-label">Changes</span> <span className="tab-count">{scan ? num(scan.summary.count) : '…'}</span>
           </button>
-          <button className={tab === 'history' ? 'on' : ''} onClick={() => setTab('history')}>
-            <History size={14} /> History
+          <button className={tab === 'history' ? 'on' : ''} onClick={() => setTab('history')} title="Commit history (2)">
+            <History size={14} /> <span className="tab-label">History</span>
+          </button>
+          <button className={tab === 'files' ? 'on' : ''} onClick={() => setTab('files')} title="Every file in the project's folders (3)">
+            <FolderTree size={14} /> <span className="tab-label">Files</span> {listedCount != null ? <span className="tab-count">{num(listedCount)}</span> : null}
           </button>
         </div>
         <div className="top-right">
@@ -463,6 +503,11 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
                     <div className="empty-mark">✓</div>
                     <div className="empty-title">{allRows.length ? 'No files match' : 'Working tree clean'}</div>
                     <div className="muted">{allRows.length ? 'Try another filter or search.' : 'Nothing has changed in these folders.'}</div>
+                    {!allRows.length ? (
+                      <button className="browse-btn" onClick={() => setTab('files')}>
+                        <FolderTree size={14} /> Browse all files <kbd>3</kbd>
+                      </button>
+                    ) : null}
                   </div>
                 ) : (
                   groups.map((g) => {
@@ -548,6 +593,24 @@ export function ProjectView({ project, prefs, onPrefs, onHome, onSettings, onPro
             />
             ) : null}
           </>
+        ) : tab === 'files' ? (
+          <FilesView
+            project={project}
+            listing={listing}
+            error={listingError}
+            statuses={statuses}
+            activeRoot={activeRoot}
+            prefs={prefs}
+            onPrefs={onPrefs}
+            themeVersion={themeVersion}
+            narrow={narrow}
+            focus={focus}
+            onFocus={() => setFocus((f) => !f)}
+            listWidth={effectiveList}
+            resizer={resizer}
+            overlayOpen={sidebarOverlay}
+            searchRef={filesSearchRef}
+          />
         ) : (
           <HistoryView project={project} root={activeRoot} prefs={prefs} onPrefs={onPrefs} themeVersion={themeVersion} narrow={narrow} focus={focus} onFocus={() => setFocus((f) => !f)} />
         )}

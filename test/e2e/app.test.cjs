@@ -132,6 +132,49 @@ test('gitview end to end', async (t) => {
     await fits(page);
   });
 
+  await t.test('Files lists every file as a tree and shows its content', async () => {
+    await page.locator('.tabs button', { hasText: 'Files' }).click();
+    await page.locator('.files-pane .tree-row.file').first().waitFor();
+    // both folders, each with its own files (deleted gone.txt is not there; untracked fresh.txt is)
+    assert.equal(await page.locator('.files-pane .group-head').count(), 2);
+    const names = await page.locator('.files-pane .tree-row.file .tree-name').allTextContents();
+    assert.deepEqual(names.slice(0, 4), ['fresh.txt', 'icon.png', 'notes.md', 'player.gd']);
+    assert.equal(names.filter((n) => n === 'gone.txt').length, 1, 'only the worktree still has gone.txt');
+    assert.equal(await page.locator('.tabs button', { hasText: 'Files' }).locator('.tab-count').textContent(), '8');
+    // unchanged files are listed too, changed ones carry their status
+    await page.locator('.files-pane .tree-row.file', { hasText: 'notes.md' }).first().locator('.status.s-M').waitFor();
+    await page.locator('.files-pane .tree-row.file', { hasText: 'player.gd' }).first().click();
+    await page.locator('.viewer .row', { hasText: 'func jump' }).waitFor();
+    assert.equal(await page.locator('.viewer .row').count(), 7);
+    assert.equal(await page.locator('.viewer .row .ln').first().textContent(), '1');
+    await page.locator('.files-pane .tree-row.file', { hasText: 'icon.png' }).first().click();
+    await page.waitForFunction(() => document.querySelector('.image-stage img')?.naturalWidth === 1);
+    assert.match(await page.locator('.diff-head .path-line').textContent(), /1 × 1/);
+    await page.keyboard.press('/');
+    await page.keyboard.type('combat');
+    assert.equal(await page.locator('.files-pane .tree-row.file').count(), 4);
+    await page.locator('.files-pane .search .clear').click();
+    await fits(page);
+    await page.setViewportSize({ width: 620, height: 660 });
+    await page.locator('.files-pane.full').waitFor();
+    await page.locator('.files-pane .tree-row.file', { hasText: 'notes.md' }).first().click();
+    await page.locator('.viewer .row', { hasText: 'inserted A' }).waitFor();
+    assert.ok((await page.evaluate(() => document.querySelector('.diff-panel').getBoundingClientRect().width)) >= 615);
+    await fits(page);
+    await page.keyboard.press('Escape');
+    await page.locator('.files-pane.full').waitFor();
+    // a very small tile still lays out inside the window
+    await page.setViewportSize({ width: 300, height: 330 });
+    await page.locator('.files-pane .tree-row.file', { hasText: 'icon.png' }).first().click();
+    await page.waitForFunction(() => document.querySelector('.image-stage img')?.naturalWidth === 1);
+    const right = await page.evaluate(() => Math.max(...[...document.querySelectorAll('.topbar button, .diff-head button, .diff-head .fname')].map((n) => n.getBoundingClientRect().right)));
+    assert.ok(right <= 300, `top bar and file header fit a 300 px window (right edge ${right})`);
+    await fits(page);
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator('.tabs button', { hasText: 'Changes' }).click();
+  });
+
   await t.test('settings change and persist', async () => {
     await page.locator('.top-right .icon-btn[title="Settings"]').click();
     await page.locator('.modal').waitFor();
@@ -166,10 +209,22 @@ test('gitview end to end', async (t) => {
   await t.test('home button returns to projects; Add project uses the folder picker', async () => {
     await page.locator('.home-btn').click();
     await page.locator('.home .add-card').waitFor();
+    fs.mkdirSync(path.join(fx.plain, 'pics'));
+    fs.copyFileSync(path.join(fx.main, 'icon.png'), path.join(fx.plain, 'pics', 'shot.png'));
     await pickFolders([fx.plain]);
     await page.locator('.home-actions .primary').click();
     await page.locator('.crumb', { hasText: 'sketches' }).waitFor();
     await page.locator('.empty-title', { hasText: 'Working tree clean' }).waitFor();
+    // nothing changed yet, but the folder's content is one click away
+    await page.locator('.browse-btn').click();
+    await page.locator('.files-pane .tree-row.dir', { hasText: 'pics' }).waitFor();
+    await page.locator('.files-pane .tree-row.file', { hasText: 'idea.txt' }).click();
+    await page.locator('.viewer .row', { hasText: 'first idea' }).waitFor();
+    await page.locator('.files-pane .tree-row.file', { hasText: 'shot.png' }).click();
+    await page.waitForFunction(() => document.querySelector('.image-stage img')?.naturalWidth === 1);
+    await page.locator('.files-pane .tree-row.dir', { hasText: 'pics' }).click();
+    assert.equal(await page.locator('.files-pane .tree-row.file', { hasText: 'shot.png' }).count(), 0, 'folders collapse');
+    await page.locator('.tabs button', { hasText: 'Changes' }).click();
     fs.writeFileSync(path.join(fx.plain, 'idea.txt'), 'first idea\nbetter idea\n');
     await page.locator('.top-right .icon-btn[title="Refresh (R)"]').click();
     await page.locator('.file-row', { hasText: 'idea.txt' }).waitFor();

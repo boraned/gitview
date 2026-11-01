@@ -18,6 +18,7 @@
 - **Git-style changes.** Every changed file with its status (`M` `A` `D` `R` `U`), grouped by folder, with search, Text/Assets filters and sorting. Staged and unstaged changes can be viewed together or separately.
 - **Real diffs.** Side-by-side or unified, syntax-highlighted, with word-level highlights and collapsible unchanged regions.
 - **Assets stay simple.** Images, models, audio, fonts, archives and other binary or complex files show only their type and size — never a wall of noise.
+- **Files.** Browse every file in a project's folders as a tree, not just the changed ones: text with line numbers and highlighting, images, audio and video previewed in place, changed files marked with their status.
 - **History.** Commits from every folder in one timeline; open a commit to see its files and their diffs.
 - **Plain folders too.** Folders without Git are compared against a snapshot taken the first time you open them (resettable).
 - **Read-only.** gitview never writes to the folders it shows. Git is queried with `--no-optional-locks`.
@@ -47,11 +48,11 @@ Requires `git` on your `PATH`.
 | Key | Action |
 | --- | --- |
 | `↑` `↓` / `j` `k` | Move through files or commits |
-| `/` | Filter files |
+| `/` | Filter or find files |
 | `F` | Focus the open file (narrow windows: open it) |
 | `Esc` | Back / leave focus |
 | `[` | Show or hide the folder sidebar |
-| `1` `2` | Changes / History |
+| `1` `2` `3` | Changes / History / Files |
 | `R` | Refresh |
 | `Alt+←` | Back to projects |
 

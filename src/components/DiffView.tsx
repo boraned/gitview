@@ -9,7 +9,7 @@ import { FileIcon, Spinner } from './bits';
 
 const FULL = 1_000_000;
 
-function renderText(text: string, tokens: ThemedToken[] | undefined, marks: Range[] | undefined): ReactNode {
+export function renderText(text: string, tokens: ThemedToken[] | undefined, marks: Range[] | undefined): ReactNode {
   const segments: { text: string; color?: string; italic?: boolean; bold?: boolean }[] = tokens?.length
     ? tokens.map((t) => ({ text: t.content, color: t.color, italic: Boolean(t.fontStyle && t.fontStyle & 1), bold: Boolean(t.fontStyle && t.fontStyle & 2) }))
     : [{ text }];
