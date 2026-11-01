@@ -21,7 +21,7 @@
 - **History.** Commits from every folder in one timeline; open a commit to see its files and their diffs.
 - **Plain folders too.** Folders without Git are compared against a snapshot taken the first time you open them (resettable).
 - **Read-only.** gitview never writes to the folders it shows. Git is queried with `--no-optional-locks`.
-- **Fits any window.** The folder sidebar collapses, the file list is resizable, focus mode gives a file the whole window, and narrow windows stack list and file.
+- **Fits any window.** No minimum window size, so tiled windows lay out at their real size. The folder sidebar collapses, the file list is resizable, focus mode gives a file the whole window, and narrow windows stack list and file.
 - **Omarchy aware.** On [Omarchy](https://omarchy.org), colours and code highlighting follow the active theme and update live when it changes. Elsewhere it uses its own dark palette.
 
 <p align="center">

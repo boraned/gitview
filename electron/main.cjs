@@ -62,8 +62,8 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1480,
     height: 940,
-    minWidth: 1000,
-    minHeight: 640,
+    // No minimum size: tiling window managers often give gitview a narrow or short tile, and the
+    // renderer must lay out at the real size (a minimum makes it render larger and get cropped).
     title: 'gitview',
     backgroundColor: '#0b0c0e',
     show: false,

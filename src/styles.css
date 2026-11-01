@@ -512,3 +512,14 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
   .home-btn { padding: 0 8px; }
   .tabs button { padding: 0 10px; }
 }
+@media (max-width: 560px) {
+  .topbar { padding: 0 6px; gap: 4px; }
+  .top-left { gap: 4px; }
+  .tab-label { display: none; }
+  .tabs button { padding: 0 9px; gap: 5px; }
+  .tabs button.on .tab-count { display: inline; }
+  .top-right { gap: 0; }
+  .list-foot { gap: 10px; overflow: hidden; white-space: nowrap; }
+  .diff-head { padding: 8px 10px; gap: 8px; }
+  .diff-tools { gap: 2px; }
+}
